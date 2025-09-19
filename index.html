@@ -133,7 +133,7 @@
                             `<button id="confirm-load-button" class="bg-purple-600 hover:bg-purple-700 text-white font-semibold py-2 px-5 rounded-lg">Load</button>${closeModalButtonHTML}`);
                         break;
                     default: // Generic error/info
-                        modalHTML = baseModal(type, `<p class="text-center text-gray-300">${content}</p>`, closeModalButtonHTML);
+                        modalHTML = baseModal(type, `<div class="text-left text-gray-300 leading-relaxed">${content}</div>`, closeModalButtonHTML);
                         break;
                 }
                 modalContainer.innerHTML = modalHTML;
@@ -147,14 +147,13 @@
             // 3. Click the "Config" radio button to see the firebaseConfig object.
             // 4. Copy that entire object and paste it below, replacing this placeholder.
             const firebaseConfig = {
-  apiKey: "AIzaSyAMr_enyW3d5I9-rQIWR8hkYlyCcxgTyrw",
-  authDomain: "soundboard-2deca.firebaseapp.com",
-  projectId: "soundboard-2deca",
-  storageBucket: "soundboard-2deca.firebasestorage.app",
-  messagingSenderId: "765465027368",
-  appId: "1:765465027368:web:294e0ea21ec27bda03e61d",
-  measurementId: "G-D8JM4MV0MB"
-};
+              apiKey: "AIzaSyAMr_enyW3d5I9-rQIWR8hkYlyCcxgTyrw",
+              authDomain: "soundboard-2deca.firebaseapp.com",
+              projectId: "soundboard-2deca",
+              storageBucket: "soundboard-2deca.firebasestorage.app",
+              messagingSenderId: "765465027368",
+              appId: "1:765465027368:web:294e0ea21ec27bda03e61d",
+              measurementId: "G-D8JM4MV0MB"
             };
             
             const isConfigMissing = !firebaseConfig.apiKey || firebaseConfig.apiKey.startsWith("PASTE_YOUR");
@@ -168,7 +167,24 @@
                 } catch (error) {
                     console.error("Firebase initialization failed:", error);
                     db = null; // Explicitly set db to null on error
-                    showModal("Firebase Error", "Could not connect to the database. Please check your Firebase config and console for details.");
+                    if (error.code === 'auth/configuration-not-found') {
+                        const detailedInstructions = `
+                            <strong class="text-white text-lg">Anonymous Sign-In is not enabled.</strong>
+                            <br><br>
+                            To fix this, follow these steps in your Firebase project:
+                            <ol class="list-decimal list-inside mt-4 space-y-2">
+                                <li>Go to the <strong>Firebase Console</strong>.</li>
+                                <li>In the left menu, click <strong>Authentication</strong> (under Build).</li>
+                                <li>Click the <strong>Sign-in method</strong> tab.</li>
+                                <li>Click on <strong>'Anonymous'</strong> in the list of providers.</li>
+                                <li><strong>Enable</strong> the toggle switch and click <strong>Save</strong>.</li>
+                            </ol>
+                            <br>
+                            Then, refresh this page.`;
+                        showModal("Action Required", detailedInstructions);
+                    } else {
+                        showModal("Firebase Error", "Could not connect to the database. Please check your Firebase config and console for details.");
+                    }
                 }
             } else {
                 console.warn("Firebase config is a placeholder. Cloud features are disabled. Edit the HTML file to enable them.");
@@ -341,7 +357,7 @@
             // --- EVENT HANDLERS ---
             
             const saveSoundboardToCloud = async () => {
-                if (!db) return showModal("Error", "Database connection is not available. Please add your Firebase config to the HTML file.");
+                if (!db) return showModal("Error", "Database connection is not available. Please add your Firebase config to the HTML file or enable Anonymous Sign-in in your Firebase console.");
                 const soundData = sounds.map(s => ({
                     id: s.id,
                     hotkey: s.hotkey,
@@ -365,7 +381,7 @@
             };
             
             const loadSoundboardFromCloud = async (code) => {
-                if (!db) return showModal("Error", "Database connection is not available. Please add your Firebase config to the HTML file.");
+                if (!db) return showModal("Error", "Database connection is not available. Please add your Firebase config to the HTML file or enable Anonymous Sign-in in your Firebase console.");
                 if (!code || code.trim().length === 0) {
                      document.getElementById('load-error-message').textContent = 'Please enter a code.';
                     return;
@@ -442,7 +458,7 @@
                 });
                 saveButton.addEventListener('click', saveSoundboardToCloud);
                 loadButton.addEventListener('click', () => {
-                    if(isConfigMissing) return;
+                    if(isConfigMissing || !db) return;
                     showModal('load');
                 });
                 
@@ -478,7 +494,7 @@
                 });
                 
                 // Disable cloud buttons if db connection is not available
-                if (isConfigMissing) {
+                if (isConfigMissing || !db) {
                     saveButton.disabled = true;
                     loadButton.disabled = true;
                     saveButton.classList.add('opacity-50', 'cursor-not-allowed');
@@ -494,6 +510,4 @@
 
 </body>
 </html>
-
-
 
