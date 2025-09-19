@@ -89,7 +89,6 @@
             const modalContainer = document.getElementById('modal-container');
 
             // --- UTILITY & HELPER FUNCTIONS ---
-            // Moved showModal function before Firebase init to handle potential init errors
             const showModal = (type, content) => {
                 modalContainer.innerHTML = ''; // Clear previous modals
                 let modalHTML = '';
@@ -137,20 +136,35 @@
 
             // --- FIREBASE SETUP ---
             let db;
-            try {
-                // Check if firebase config exists and is not an empty object
-                const firebaseConfigStr = typeof __firebase_config !== 'undefined' ? __firebase_config : '{}';
-                const firebaseConfig = JSON.parse(firebaseConfigStr);
-                if (Object.keys(firebaseConfig).length === 0) {
-                    throw new Error("Firebase config not found.");
+            // VITAL STEP: PASTE YOUR FIREBASE CONFIG HERE
+            // 1. Go to your Firebase project settings.
+            // 2. Under "Your apps", find your web app.
+            // 3. Click the "Config" radio button to see the firebaseConfig object.
+            // 4. Copy that entire object and paste it below, replacing this placeholder.
+            const firebaseConfig = {
+              apiKey: "PASTE_YOUR_API_KEY_HERE",
+              authDomain: "PASTE_YOUR_authDomain_HERE",
+              projectId: "PASTE_YOUR_projectId_HERE",
+              storageBucket: "PASTE_YOUR_storageBucket_HERE",
+              messagingSenderId: "PASTE_YOUR_messagingSenderId_HERE",
+              appId: "PASTE_YOUR_appId_HERE"
+            };
+            
+            const isConfigMissing = !firebaseConfig.apiKey || firebaseConfig.apiKey.startsWith("PASTE_YOUR");
+
+            if (!isConfigMissing) {
+                try {
+                    const app = initializeApp(firebaseConfig);
+                    db = getFirestore(app);
+                    const auth = getAuth(app);
+                    await signInAnonymously(auth);
+                } catch (error) {
+                    console.error("Firebase initialization failed:", error);
+                    db = null; // Explicitly set db to null on error
+                    showModal("Firebase Error", "Could not connect to the database. Please check your Firebase config and console for details.");
                 }
-                const app = initializeApp(firebaseConfig);
-                db = getFirestore(app);
-                const auth = getAuth(app);
-                await signInAnonymously(auth);
-            } catch (error) {
-                console.error("Firebase initialization failed. Save/Load will not work.", error);
-                showModal("Error", "Could not connect to the database. Save/Load features are disabled.");
+            } else {
+                console.warn("Firebase config is a placeholder. Cloud features are disabled. Edit the HTML file to enable them.");
             }
 
             // --- STATE ---
@@ -204,12 +218,6 @@
                 if (!soundObj || !soundObj.audio) return;
                 const button = soundObj.elements.playButton;
                 if (soundObj.audio.paused) {
-                    // Stop any other playing sounds
-                    sounds.forEach(s => {
-                        if (s.id !== id && s.audio && !s.audio.paused) {
-                           toggleSound(s.id);
-                        }
-                    });
                     soundObj.audio.currentTime = 0;
                     soundObj.audio.play().catch(e => console.error("Error playing sound:", e));
                     button.textContent = 'Stop';
@@ -325,7 +333,7 @@
             // --- EVENT HANDLERS ---
             
             const saveSoundboardToCloud = async () => {
-                if (!db) return showModal("Error", "Database connection is not available.");
+                if (!db) return showModal("Error", "Database connection is not available. Please add your Firebase config to the HTML file.");
                 const soundData = sounds.map(s => ({
                     id: s.id,
                     hotkey: s.hotkey,
@@ -349,7 +357,7 @@
             };
             
             const loadSoundboardFromCloud = async (code) => {
-                if (!db) return showModal("Error", "Database connection is not available.");
+                if (!db) return showModal("Error", "Database connection is not available. Please add your Firebase config to the HTML file.");
                 if (!code || code.trim().length === 0) {
                      document.getElementById('load-error-message').textContent = 'Please enter a code.';
                     return;
@@ -457,6 +465,16 @@
                         });
                     });
                 });
+                
+                // Disable cloud buttons if db connection is not available
+                if (!db) {
+                    saveButton.disabled = true;
+                    loadButton.disabled = true;
+                    saveButton.classList.add('opacity-50', 'cursor-not-allowed');
+                    loadButton.classList.add('opacity-50', 'cursor-not-allowed');
+                    saveButton.title = "Cloud features disabled. Please provide Firebase credentials in the HTML file.";
+                    loadButton.title = "Cloud features disabled. Please provide Firebase credentials in the HTML file.";
+                }
             };
             
             init();
