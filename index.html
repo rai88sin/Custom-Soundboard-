@@ -86,7 +86,7 @@
     <!-- Firebase SDKs -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-        import { getFirestore, doc, getDoc, setDoc, collection, addDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+        import { getFirestore, doc, getDoc, setDoc, collection, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
         import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 
         document.addEventListener('DOMContentLoaded', async () => {
@@ -142,10 +142,6 @@
             // --- FIREBASE SETUP ---
             let db;
             // VITAL STEP: PASTE YOUR FIREBASE CONFIG HERE
-            // 1. Go to your Firebase project settings.
-            // 2. Under "Your apps", find your web app.
-            // 3. Click the "Config" radio button to see the firebaseConfig object.
-            // 4. Copy that entire object and paste it below, replacing this placeholder.
             const firebaseConfig = {
               apiKey: "AIzaSyAMr_enyW3d5I9-rQIWR8hkYlyCcxgTyrw",
               authDomain: "soundboard-2deca.firebaseapp.com",
@@ -166,11 +162,10 @@
                     await signInAnonymously(auth);
                 } catch (error) {
                     console.error("Firebase initialization failed:", error);
-                    db = null; // Explicitly set db to null on error
+                    db = null;
                     if (error.code === 'auth/configuration-not-found') {
                         const detailedInstructions = `
-                            <strong class="text-white text-lg">Anonymous Sign-In is not enabled.</strong>
-                            <br><br>
+                            <strong class="text-white text-lg">Anonymous Sign-In is not enabled.</strong><br><br>
                             To fix this, follow these steps in your Firebase project:
                             <ol class="list-decimal list-inside mt-4 space-y-2">
                                 <li>Go to the <strong>Firebase Console</strong>.</li>
@@ -178,8 +173,7 @@
                                 <li>Click the <strong>Sign-in method</strong> tab.</li>
                                 <li>Click on <strong>'Anonymous'</strong> in the list of providers.</li>
                                 <li><strong>Enable</strong> the toggle switch and click <strong>Save</strong>.</li>
-                            </ol>
-                            <br>
+                            </ol><br>
                             Then, refresh this page.`;
                         showModal("Action Required", detailedInstructions);
                     } else {
@@ -227,7 +221,7 @@
                         id: s.id,
                         hotkey: s.hotkey,
                         fileName: s.fileName,
-                        audioData: s.audioData // Base64 string
+                        audioData: s.audioData
                     }));
                     localStorage.setItem('soundboardState', JSON.stringify(stateToSave));
                 } catch (e) {
@@ -307,7 +301,7 @@
                 const newSoundObj = {
                     id: soundId,
                     audio: null,
-                    audioData: null, // Base64 data
+                    audioData: null,
                     fileName: 'No file selected',
                     hotkey: String(soundId),
                     color: color,
@@ -341,7 +335,6 @@
                 newSoundObj.elements.playButton.addEventListener('click', () => toggleSound(soundId));
                 newSoundObj.elements.uploadInput.addEventListener('change', (e) => handleFileUpload(e, soundId));
                 
-                // Avoid duplicates when loading from state
                 if (!sounds.some(s => s.id === soundId)) {
                     sounds.push(newSoundObj);
                 }
@@ -357,31 +350,44 @@
             // --- EVENT HANDLERS ---
             
             const saveSoundboardToCloud = async () => {
-                if (!db) return showModal("Error", "Database connection is not available. Please add your Firebase config to the HTML file or enable Anonymous Sign-in in your Firebase console.");
-                const soundData = sounds.map(s => ({
+                if (!db) return showModal("Error", "Database connection is not available. Please check your Firebase setup.");
+                const soundsToSave = sounds.map(s => ({
                     id: s.id,
                     hotkey: s.hotkey,
                     fileName: s.fileName,
                     audioData: s.audioData
-                })).filter(s => s.audioData); // Only save boards with uploaded audio
+                })).filter(s => s.audioData);
 
-                if (soundData.length === 0) {
+                if (soundsToSave.length === 0) {
                     return showModal("Cannot Save", "Please upload at least one audio file before saving.");
                 }
 
                 showModal('loading', 'Saving soundboard...');
                 try {
-                    const docRef = await addDoc(collection(db, "soundboards"), { data: soundData });
+                    // Step 1: Save each sound file individually
+                    const soundDocPromises = soundsToSave.map(soundData => 
+                        addDoc(collection(db, "sound_data"), soundData)
+                    );
+                    const soundDocRefs = await Promise.all(soundDocPromises);
+                    const soundDocIds = soundDocRefs.map(docRef => docRef.id);
+
+                    // Step 2: Save the main soundboard document with references to the sound files
+                    const mainDocRef = await addDoc(collection(db, "soundboards"), {
+                        soundIds: soundDocIds,
+                        createdAt: serverTimestamp()
+                    });
+
                     closeModal();
-                    showModal('save-code', docRef.id);
+                    showModal('save-code', mainDocRef.id);
                 } catch (error) {
-                    console.error("Error adding document: ", error);
-                    showModal("Error", "Could not save the soundboard to the cloud.");
+                    closeModal();
+                    console.error("Error saving soundboard: ", error);
+                    showModal("Error", "Could not save the soundboard to the cloud. The connection may have been lost.");
                 }
             };
             
             const loadSoundboardFromCloud = async (code) => {
-                if (!db) return showModal("Error", "Database connection is not available. Please add your Firebase config to the HTML file or enable Anonymous Sign-in in your Firebase console.");
+                if (!db) return showModal("Error", "Database connection is not available. Please check your Firebase setup.");
                 if (!code || code.trim().length === 0) {
                      document.getElementById('load-error-message').textContent = 'Please enter a code.';
                     return;
@@ -389,20 +395,33 @@
 
                 showModal('loading', 'Loading soundboard...');
                 try {
-                    const docRef = doc(db, "soundboards", code.trim());
-                    const docSnap = await getDoc(docRef);
+                    // Step 1: Fetch the main soundboard document
+                    const mainDocRef = doc(db, "soundboards", code.trim());
+                    const mainDocSnap = await getDoc(mainDocRef);
 
-                    if (docSnap.exists()) {
-                        const cloudData = docSnap.data().data;
-                        rebuildSoundboard(cloudData);
-                        closeModal();
-                    } else {
-                        closeModal();
-                        showModal("Error", "No soundboard found with that code.");
+                    if (!mainDocSnap.exists()) {
+                         closeModal();
+                         return showModal("Error", "No soundboard found with that code.");
                     }
+
+                    // Step 2: Get the array of sound IDs and fetch each one
+                    const soundIds = mainDocSnap.data().soundIds;
+                    if (!soundIds || soundIds.length === 0) {
+                        closeModal();
+                        return showModal("Error", "This soundboard is empty.");
+                    }
+
+                    const soundDocPromises = soundIds.map(id => getDoc(doc(db, "sound_data", id)));
+                    const soundDocSnaps = await Promise.all(soundDocPromises);
+                    
+                    const soundData = soundDocSnaps.map(snap => snap.data()).filter(Boolean); // filter out any that might not have been found
+                    
+                    rebuildSoundboard(soundData);
+                    closeModal();
+
                 } catch (error) {
-                     console.error("Error getting document:", error);
                      closeModal();
+                     console.error("Error getting document:", error);
                      showModal("Error", "Could not load the soundboard.");
                 }
             };
@@ -476,7 +495,6 @@
                     settingsContent += '</div>';
                     showModal('settings', settingsContent);
 
-                    // Re-attach listeners after modal is created
                     document.querySelectorAll('#hotkey-settings-container input').forEach(input => {
                         input.addEventListener('keydown', (e) => {
                             e.preventDefault();
@@ -493,7 +511,6 @@
                     });
                 });
                 
-                // Disable cloud buttons if db connection is not available
                 if (isConfigMissing || !db) {
                     saveButton.disabled = true;
                     loadButton.disabled = true;
