@@ -6,6 +6,8 @@
     <title>Custom Soundboard</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- FFmpeg for client-side audio extraction -->
+    <script src="https://unpkg.com/@ffmpeg/ffmpeg@0.12.10/dist/umd/ffmpeg.js"></script>
     <style>
         body {
             font-family: 'Inter', sans-serif;
@@ -194,6 +196,7 @@
 
             // --- STATE ---
             let sounds = [];
+            let ffmpeg; // Global ffmpeg instance
             const colors = ['blue', 'indigo', 'purple', 'pink', 'red', 'orange', 'yellow', 'green', 'teal', 'cyan'];
 
             // --- DOM ELEMENTS ---
@@ -205,6 +208,16 @@
             
             const closeModal = () => {
                 modalContainer.innerHTML = '';
+            };
+
+            const loadFFmpeg = async () => {
+                if (ffmpeg && ffmpeg.loaded) return ffmpeg;
+                showModal('loading', 'Loading audio processor...');
+                ffmpeg = new FFmpeg.FFmpeg();
+                await ffmpeg.load({
+                    coreURL: 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd/ffmpeg-core.js'
+                });
+                return ffmpeg;
             };
 
             const fileToBase64 = (file) => new Promise((resolve, reject) => {
@@ -265,7 +278,29 @@
                 if (!file || !soundObj) return;
 
                 try {
-                    const {name, data} = await fileToBase64(file);
+                    let audioFileForProcessing;
+                    let originalFileName = file.name;
+
+                    if (file.type.startsWith('video/')) {
+                        await loadFFmpeg();
+                        updateModalContent(`<div class="text-center"><div class="loader mx-auto"></div><p class="ml-4 mt-4">Extracting audio...<br>(This can take a while for large videos)</p></div>`);
+
+                        await ffmpeg.writeFile(originalFileName, new Uint8Array(await file.arrayBuffer()));
+                        await ffmpeg.exec(['-i', originalFileName, 'output.mp3']);
+                        const data = await ffmpeg.readFile('output.mp3');
+                        
+                        const audioBlob = new Blob([data.buffer], { type: 'audio/mp3' });
+                        audioFileForProcessing = new File([audioBlob], originalFileName.replace(/\.[^/.]+$/, "") + ".mp3", { type: 'audio/mp3' });
+
+                    } else if (file.type.startsWith('audio/')) {
+                        audioFileForProcessing = file;
+                    } else {
+                        return showModal("Unsupported File", "Please upload a valid audio or video file.");
+                    }
+
+                    // Now, process the final audio file (either original or extracted)
+                    const { name, data } = await fileToBase64(audioFileForProcessing);
+                    
                     soundObj.audioData = data;
                     soundObj.fileName = name;
                     soundObj.audio = base64toAudio(data);
@@ -281,8 +316,12 @@
                         button.classList.remove('bg-red-600', 'hover:bg-red-700');
                     });
                     saveStateToLocalStorage();
+                    closeModal();
+
                 } catch (error) {
-                    showModal("Upload Error", error.message);
+                    closeModal();
+                    console.error("Error processing file:", error);
+                    showModal("Processing Error", "Could not process the file. It might be corrupted or in an unsupported format.");
                 }
             };
 
@@ -306,9 +345,9 @@
                         <div id="menu-${soundId}" class="hidden absolute top-12 right-2 bg-gray-900/90 backdrop-blur-sm p-4 rounded-lg shadow-xl z-10 w-52 space-y-3 border border-gray-700">
                             <div class="text-center">
                                 <label for="upload-${soundId}" class="cursor-pointer bg-gray-700 hover:bg-gray-600 text-white font-medium py-2 px-4 rounded-lg inline-block w-full">
-                                    Upload Audio
+                                    Upload File
                                 </label>
-                                <input type="file" id="upload-${soundId}" accept="audio/*" class="hidden">
+                                <input type="file" id="upload-${soundId}" accept="audio/*,video/*" class="hidden">
                                 <p id="file-name-${soundId}" class="text-sm text-gray-400 mt-2 truncate w-full">No file selected</p>
                             </div>
                             <div class="text-gray-300">Hotkey: <span id="hotkey-display-${soundId}" class="font-mono bg-gray-700 px-2 py-1 rounded">${soundId}</span></div>
