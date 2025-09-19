@@ -86,32 +86,10 @@
         import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 
         document.addEventListener('DOMContentLoaded', async () => {
-            // --- FIREBASE SETUP ---
-            let db;
-            try {
-                const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
-                const app = initializeApp(firebaseConfig);
-                db = getFirestore(app);
-                const auth = getAuth(app);
-                await signInAnonymously(auth);
-            } catch (error) {
-                console.error("Firebase initialization failed. Save/Load will not work.", error);
-                showModal("Error", "Could not connect to the database. Save/Load features are disabled.");
-            }
-
-            // --- STATE ---
-            let sounds = [];
-            const colors = ['blue', 'indigo', 'purple', 'pink', 'red', 'orange', 'yellow', 'green', 'teal', 'cyan'];
-
-            // --- DOM ELEMENTS ---
-            const soundboardGrid = document.getElementById('soundboard-grid');
-            const addSoundButton = document.getElementById('add-sound-button');
-            const settingsButton = document.getElementById('settings-button');
-            const saveButton = document.getElementById('save-button');
-            const loadButton = document.getElementById('load-button');
             const modalContainer = document.getElementById('modal-container');
 
             // --- UTILITY & HELPER FUNCTIONS ---
+            // Moved showModal function before Firebase init to handle potential init errors
             const showModal = (type, content) => {
                 modalContainer.innerHTML = ''; // Clear previous modals
                 let modalHTML = '';
@@ -157,6 +135,35 @@
                 modalContainer.innerHTML = modalHTML;
             };
 
+            // --- FIREBASE SETUP ---
+            let db;
+            try {
+                // Check if firebase config exists and is not an empty object
+                const firebaseConfigStr = typeof __firebase_config !== 'undefined' ? __firebase_config : '{}';
+                const firebaseConfig = JSON.parse(firebaseConfigStr);
+                if (Object.keys(firebaseConfig).length === 0) {
+                    throw new Error("Firebase config not found.");
+                }
+                const app = initializeApp(firebaseConfig);
+                db = getFirestore(app);
+                const auth = getAuth(app);
+                await signInAnonymously(auth);
+            } catch (error) {
+                console.error("Firebase initialization failed. Save/Load will not work.", error);
+                showModal("Error", "Could not connect to the database. Save/Load features are disabled.");
+            }
+
+            // --- STATE ---
+            let sounds = [];
+            const colors = ['blue', 'indigo', 'purple', 'pink', 'red', 'orange', 'yellow', 'green', 'teal', 'cyan'];
+
+            // --- DOM ELEMENTS ---
+            const soundboardGrid = document.getElementById('soundboard-grid');
+            const addSoundButton = document.getElementById('add-sound-button');
+            const settingsButton = document.getElementById('settings-button');
+            const saveButton = document.getElementById('save-button');
+            const loadButton = document.getElementById('load-button');
+            
             const closeModal = () => {
                 modalContainer.innerHTML = '';
             };
@@ -195,7 +202,6 @@
             const toggleSound = (id) => {
                 const soundObj = sounds.find(s => s.id === id);
                 if (!soundObj || !soundObj.audio) return;
-                //... (rest of the function is the same as previous version)
                 const button = soundObj.elements.playButton;
                 if (soundObj.audio.paused) {
                     // Stop any other playing sounds
@@ -395,7 +401,6 @@
                  if (modalContainer.innerHTML !== '' || e.target.tagName === 'INPUT') {
                     return;
                 }
-                //... (rest of the function is the same as previous version)
                 const key = e.key === ' ' ? 'Space' : e.key;
                 const soundToPlay = sounds.find(s => s.hotkey === key);
                 if (soundToPlay) {
