@@ -138,6 +138,13 @@
                 }
                 modalContainer.innerHTML = modalHTML;
             };
+            
+            const updateModalContent = (bodyContent) => {
+                const modalBody = document.querySelector('#modal-backdrop .flex-grow');
+                if (modalBody) {
+                    modalBody.innerHTML = bodyContent;
+                }
+            };
 
             // --- FIREBASE SETUP ---
             let db;
@@ -362,16 +369,20 @@
                     return showModal("Cannot Save", "Please upload at least one audio file before saving.");
                 }
 
-                showModal('loading', 'Saving soundboard...');
+                showModal('loading', 'Preparing to save...');
                 try {
-                    // Step 1: Save each sound file individually
-                    const soundDocPromises = soundsToSave.map(soundData => 
-                        addDoc(collection(db, "sound_data"), soundData)
-                    );
-                    const soundDocRefs = await Promise.all(soundDocPromises);
-                    const soundDocIds = soundDocRefs.map(docRef => docRef.id);
+                    const soundDocIds = [];
+                    for (const [index, soundData] of soundsToSave.entries()) {
+                        const progressBody = `<div class="flex justify-center items-center"><div class="loader"></div><p class="ml-4">Saving sound ${index + 1} of ${soundsToSave.length}...</p></div>`;
+                        updateModalContent(progressBody);
+                        
+                        const docRef = await addDoc(collection(db, "sound_data"), soundData);
+                        soundDocIds.push(docRef.id);
+                    }
 
-                    // Step 2: Save the main soundboard document with references to the sound files
+                    const finalizingBody = `<div class="flex justify-center items-center"><div class="loader"></div><p class="ml-4">Finalizing...</p></div>`;
+                    updateModalContent(finalizingBody);
+                    
                     const mainDocRef = await addDoc(collection(db, "soundboards"), {
                         soundIds: soundDocIds,
                         createdAt: serverTimestamp()
@@ -393,9 +404,8 @@
                     return;
                 }
 
-                showModal('loading', 'Loading soundboard...');
+                showModal('loading', 'Fetching soundboard info...');
                 try {
-                    // Step 1: Fetch the main soundboard document
                     const mainDocRef = doc(db, "soundboards", code.trim());
                     const mainDocSnap = await getDoc(mainDocRef);
 
@@ -404,17 +414,22 @@
                          return showModal("Error", "No soundboard found with that code.");
                     }
 
-                    // Step 2: Get the array of sound IDs and fetch each one
                     const soundIds = mainDocSnap.data().soundIds;
                     if (!soundIds || soundIds.length === 0) {
                         closeModal();
                         return showModal("Error", "This soundboard is empty.");
                     }
-
-                    const soundDocPromises = soundIds.map(id => getDoc(doc(db, "sound_data", id)));
-                    const soundDocSnaps = await Promise.all(soundDocPromises);
                     
-                    const soundData = soundDocSnaps.map(snap => snap.data()).filter(Boolean); // filter out any that might not have been found
+                    const soundData = [];
+                    for (const [index, id] of soundIds.entries()) {
+                        const progressBody = `<div class="flex justify-center items-center"><div class="loader"></div><p class="ml-4">Loading sound ${index + 1} of ${soundIds.length}...</p></div>`;
+                        updateModalContent(progressBody);
+
+                        const soundDocSnap = await getDoc(doc(db, "sound_data", id));
+                        if (soundDocSnap.exists()) {
+                            soundData.push(soundDocSnap.data());
+                        }
+                    }
                     
                     rebuildSoundboard(soundData);
                     closeModal();
