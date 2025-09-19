@@ -278,32 +278,30 @@
                 if (!file || !soundObj) return;
 
                 try {
-                    let audioFileForProcessing;
-                    let originalFileName = file.name;
-
-                    if (file.type.startsWith('video/')) {
-                        await loadFFmpeg();
-                        updateModalContent(`<div class="text-center"><div class="loader mx-auto"></div><p class="ml-4 mt-4">Extracting audio...<br>(This can take a while for large videos)</p></div>`);
-
-                        await ffmpeg.writeFile(originalFileName, new Uint8Array(await file.arrayBuffer()));
-                        await ffmpeg.exec(['-i', originalFileName, 'output.mp3']);
-                        const data = await ffmpeg.readFile('output.mp3');
-                        
-                        const audioBlob = new Blob([data.buffer], { type: 'audio/mp3' });
-                        audioFileForProcessing = new File([audioBlob], originalFileName.replace(/\.[^/.]+$/, "") + ".mp3", { type: 'audio/mp3' });
-
-                    } else if (file.type.startsWith('audio/')) {
-                        audioFileForProcessing = file;
-                    } else {
+                    if (!file.type.startsWith('audio/') && !file.type.startsWith('video/')) {
                         return showModal("Unsupported File", "Please upload a valid audio or video file.");
                     }
 
-                    // Now, process the final audio file (either original or extracted)
-                    const { name, data } = await fileToBase64(audioFileForProcessing);
+                    await loadFFmpeg();
                     
-                    soundObj.audioData = data;
+                    const modalMessage = file.type.startsWith('video/') ? 'Extracting audio...' : 'Processing audio...';
+                    updateModalContent(`<div class="text-center"><div class="loader mx-auto"></div><p class="ml-4 mt-4">${modalMessage}<br>(This can take a moment)</p></div>`);
+
+                    const originalFileName = file.name;
+                    await ffmpeg.writeFile(originalFileName, new Uint8Array(await file.arrayBuffer()));
+                    
+                    await ffmpeg.exec(['-i', originalFileName, 'output.mp3']);
+                    const data = await ffmpeg.readFile('output.mp3');
+                    
+                    const audioBlob = new Blob([data.buffer], { type: 'audio/mp3' });
+                    const audioFileForProcessing = new File([audioBlob], originalFileName.replace(/\.[^/.]+$/, "") + ".mp3", { type: 'audio/mp3' });
+
+                    // Now, process the final audio file (the converted mp3)
+                    const { name, data: base64Data } = await fileToBase64(audioFileForProcessing);
+                    
+                    soundObj.audioData = base64Data;
                     soundObj.fileName = name;
-                    soundObj.audio = base64toAudio(data);
+                    soundObj.audio = base64toAudio(base64Data);
                     
                     soundObj.elements.playButton.disabled = false;
                     soundObj.elements.fileName.textContent = name;
