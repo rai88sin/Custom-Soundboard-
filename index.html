@@ -60,7 +60,7 @@
             <p class="text-lg text-gray-400 mt-2">Your sounds, anywhere. Save your board and load it with a code.</p>
         </header>
 
-        <main id="soundboard-grid" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6 min-h-[250px]">
+        <main id="soundboard-grid" class="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 min-h-[250px]">
             <!-- Sound controls are added by JavaScript -->
         </main>
         
@@ -242,16 +242,18 @@
                 const soundObj = sounds.find(s => s.id === id);
                 if (!soundObj || !soundObj.audio) return;
                 const button = soundObj.elements.playButton;
+                const status = soundObj.elements.playStatus;
+
                 if (soundObj.audio.paused) {
                     soundObj.audio.currentTime = 0;
                     soundObj.audio.play().catch(e => console.error("Error playing sound:", e));
-                    button.textContent = 'Stop';
+                    status.textContent = 'Stop';
                     button.classList.remove(`bg-${soundObj.color}-600`, `hover:bg-${soundObj.color}-700`);
                     button.classList.add('bg-red-600', 'hover:bg-red-700');
                 } else {
                     soundObj.audio.pause();
                     soundObj.audio.currentTime = 0;
-                    button.textContent = `Play`;
+                    status.textContent = `Play`;
                     button.classList.add(`bg-${soundObj.color}-600`, `hover:bg-${soundObj.color}-700`);
                     button.classList.remove('bg-red-600', 'hover:bg-red-700');
                 }
@@ -270,11 +272,11 @@
                     
                     soundObj.elements.playButton.disabled = false;
                     soundObj.elements.fileName.textContent = name;
-                    soundObj.elements.playButton.textContent = `Play`;
+                    soundObj.elements.playStatus.textContent = `Play`;
 
                     soundObj.audio.addEventListener('ended', () => {
                         const button = soundObj.elements.playButton;
-                        button.textContent = `Play`;
+                        soundObj.elements.playStatus.textContent = `Play`;
                         button.classList.add(`bg-${soundObj.color}-600`, `hover:bg-${soundObj.color}-700`);
                         button.classList.remove('bg-red-600', 'hover:bg-red-700');
                     });
@@ -289,19 +291,28 @@
                 const color = colors[(soundId - 1) % colors.length];
 
                 const soundControlHTML = `
-                    <div id="sound-control-${soundId}" class="bg-gray-800 p-6 rounded-2xl shadow-lg flex flex-col items-center">
-                        <h2 class="text-2xl font-semibold mb-4">Sound ${soundId}</h2>
-                        <button id="play-button-${soundId}" class="sound-button w-full h-24 bg-${color}-600 hover:bg-${color}-700 disabled:bg-gray-600 disabled:cursor-not-allowed rounded-lg text-xl font-bold flex items-center justify-center" disabled>
-                            Upload a sound
+                    <div id="sound-control-${soundId}" class="relative bg-gray-800 rounded-2xl shadow-lg flex flex-col items-center justify-center aspect-square">
+                        <button id="menu-toggle-${soundId}" class="absolute top-1 right-1 p-2 rounded-full hover:bg-gray-700 z-20 text-gray-400 hover:text-white transition-colors">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 5v.01M12 12v.01M12 19v.01" />
+                            </svg>
                         </button>
-                        <div class="w-full mt-4 text-center">
-                            <label for="upload-${soundId}" class="cursor-pointer bg-gray-700 hover:bg-gray-600 text-white font-medium py-2 px-4 rounded-lg inline-block">
-                                Upload Audio
-                            </label>
-                            <input type="file" id="upload-${soundId}" accept="audio/*" class="hidden">
-                            <p id="file-name-${soundId}" class="text-sm text-gray-400 mt-2 truncate">No file selected</p>
+                        
+                        <button id="play-button-${soundId}" class="sound-button w-full h-full flex flex-col items-center justify-center bg-${color}-600 hover:bg-${color}-700 disabled:bg-gray-600 disabled:cursor-not-allowed rounded-2xl text-white p-2 text-center" disabled>
+                            <span class="font-bold text-xl sm:text-2xl" id="play-title-${soundId}">Sound ${soundId}</span>
+                            <span class="text-base sm:text-lg mt-1" id="play-status-${soundId}">Upload a sound</span>
+                        </button>
+
+                        <div id="menu-${soundId}" class="hidden absolute top-12 right-2 bg-gray-900/90 backdrop-blur-sm p-4 rounded-lg shadow-xl z-10 w-52 space-y-3 border border-gray-700">
+                            <div class="text-center">
+                                <label for="upload-${soundId}" class="cursor-pointer bg-gray-700 hover:bg-gray-600 text-white font-medium py-2 px-4 rounded-lg inline-block w-full">
+                                    Upload Audio
+                                </label>
+                                <input type="file" id="upload-${soundId}" accept="audio/*" class="hidden">
+                                <p id="file-name-${soundId}" class="text-sm text-gray-400 mt-2 truncate w-full">No file selected</p>
+                            </div>
+                            <div class="text-gray-300">Hotkey: <span id="hotkey-display-${soundId}" class="font-mono bg-gray-700 px-2 py-1 rounded">${soundId}</span></div>
                         </div>
-                        <p class="mt-4 text-gray-300">Hotkey: <span id="hotkey-display-${soundId}" class="font-mono bg-gray-700 px-2 py-1 rounded">${soundId}</span></p>
                     </div>`;
                 soundboardGrid.insertAdjacentHTML('beforeend', soundControlHTML);
                 
@@ -314,9 +325,13 @@
                     color: color,
                     elements: {
                         playButton: document.getElementById(`play-button-${soundId}`),
+                        playTitle: document.getElementById(`play-title-${soundId}`),
+                        playStatus: document.getElementById(`play-status-${soundId}`),
                         uploadInput: document.getElementById(`upload-${soundId}`),
                         fileName: document.getElementById(`file-name-${soundId}`),
-                        hotkeyDisplay: document.getElementById(`hotkey-display-${soundId}`)
+                        hotkeyDisplay: document.getElementById(`hotkey-display-${soundId}`),
+                        menuToggle: document.getElementById(`menu-toggle-${soundId}`),
+                        menu: document.getElementById(`menu-${soundId}`)
                     }
                 };
                 
@@ -327,11 +342,11 @@
                     if(data.audioData) {
                          newSoundObj.audio = base64toAudio(data.audioData);
                          newSoundObj.elements.playButton.disabled = false;
-                         newSoundObj.elements.playButton.textContent = `Play`;
+                         newSoundObj.elements.playStatus.textContent = `Play`;
                          newSoundObj.elements.fileName.textContent = data.fileName;
                          newSoundObj.audio.addEventListener('ended', () => {
                             const button = newSoundObj.elements.playButton;
-                            button.textContent = `Play`;
+                            newSoundObj.elements.playStatus.textContent = `Play`;
                             button.classList.add(`bg-${newSoundObj.color}-600`, `hover:bg-${newSoundObj.color}-700`);
                             button.classList.remove('bg-red-600', 'hover:bg-red-700');
                         });
@@ -341,6 +356,14 @@
 
                 newSoundObj.elements.playButton.addEventListener('click', () => toggleSound(soundId));
                 newSoundObj.elements.uploadInput.addEventListener('change', (e) => handleFileUpload(e, soundId));
+                newSoundObj.elements.menuToggle.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const isHidden = newSoundObj.elements.menu.classList.contains('hidden');
+                    sounds.forEach(s => s.elements.menu.classList.add('hidden'));
+                    if (isHidden) {
+                        newSoundObj.elements.menu.classList.remove('hidden');
+                    }
+                });
                 
                 if (!sounds.some(s => s.id === soundId)) {
                     sounds.push(newSoundObj);
@@ -460,6 +483,19 @@
                 if (e.target.id === 'confirm-load-button') {
                     const codeInput = document.getElementById('load-code-input');
                     loadSoundboardFromCloud(codeInput.value);
+                }
+            });
+
+            window.addEventListener('click', (e) => {
+                for (const sound of sounds) {
+                    const { menu, menuToggle } = sound.elements;
+                    if (!menu.classList.contains('hidden')) {
+                        const isClickInsideMenu = menu.contains(e.target);
+                        const isClickOnToggle = menuToggle.contains(e.target);
+                        if (!isClickInsideMenu && !isClickOnToggle) {
+                            menu.classList.add('hidden');
+                        }
+                    }
                 }
             });
 
